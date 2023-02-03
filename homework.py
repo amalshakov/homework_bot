@@ -8,7 +8,7 @@ import requests
 import telegram
 from dotenv import load_dotenv
 
-from exceptions import OkStatusError
+from exceptions import OkStatusError, UnavailableApiError
 
 load_dotenv()
 
@@ -58,19 +58,20 @@ def get_api_answer(timestamp):
     try:
         response = requests.get(ENDPOINT, headers=HEADERS, params=payload)
     except requests.RequestException as error:
-        raise ValueError(
-            f'Cбой при запросе к API: {error}. '
+        raise UnavailableApiError(
+            f'API недоступно: {error}. '
             f'Параметры запроса: {ENDPOINT}; {HEADERS}; {payload}.'
         )
     except Exception as error:
-        raise Exception(
-            f'Cбой при запросе к API: {error}. '
+        raise UnavailableApiError(
+            f'Возникла непредвиденная ошибка при работе с API: {error}. '
             f'Параметры запроса: {ENDPOINT}; {HEADERS}; {payload}.'
         )
     if response.status_code != HTTPStatus.OK:
         raise OkStatusError(
             f'API домашки возвращает код, отличный от 200. '
-            f'Текст ответа: {response}. '
+            f'Текст ответа: {response.text}. '
+            f'Status code: {response.status_code}. '
             f'Параметры запроса: {ENDPOINT}; {HEADERS}; {payload}.'
         )
     return response.json()
@@ -118,7 +119,6 @@ def main():
             homeworks = get_api_answer(timestamp)
             check_response(homeworks)
             timestamp = homeworks.get('current_date')
-            print(timestamp)
             if homeworks.get('homeworks') == []:
                 new_message = 'Список домашних работ на данный момент пуст'
             else:
@@ -127,10 +127,12 @@ def main():
             if message != new_message:
                 message = new_message
                 send_message(bot, message)
+            else:
+                logging.debug('Новые статусы отсутствуют ')
             logging.debug(message)
         except Exception as error:
             logging.error(f'Сбой в работе программы: {error}', exc_info=True)
-            if message != f'Сбой в работе программы: {error}':
+            if new_message != f'Сбой в работе программы: {error}':
                 message = f'Сбой в работе программы: {error}'
                 send_message(bot, message)
         finally:

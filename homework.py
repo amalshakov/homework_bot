@@ -1,5 +1,6 @@
 import logging
 import os
+import sys
 import time
 from http import HTTPStatus
 
@@ -7,7 +8,7 @@ import requests
 import telegram
 from dotenv import load_dotenv
 
-from exceptions import IncorrectStatusError, NotFalseError, OkStatusError
+from exceptions import OkStatusError
 
 load_dotenv()
 
@@ -28,20 +29,18 @@ HOMEWORK_VERDICTS = {
 
 def check_tokens():
     """Проверяет доступность переменных окружения."""
-    if all([TELEGRAM_CHAT_ID, PRACTICUM_TOKEN, TELEGRAM_TOKEN]) is False:
-        logging.critical(
+    if not all([TELEGRAM_CHAT_ID, PRACTICUM_TOKEN, TELEGRAM_TOKEN]):
+        message_error = (
             'Отсутствует обязательная переменная окружения. '
             'Программа принудительно остановлена.'
         )
-        raise NotFalseError(
-            'Отсутствует обязательная переменная окружения. '
-            'Программа принудительно остановлена.'
-        )
+        logging.critical(message_error)
+        sys.exit(message_error)
 
 
 def send_message(bot, message):
     """Отправляет сообщение в Telegram чат."""
-    logging.debug(send_message.__doc__)
+    logging.debug('Отправка сообщения в Telegram чат.')
     try:
         bot.send_message(TELEGRAM_CHAT_ID, message)
     except telegram.error.TelegramError as error:
@@ -59,15 +58,22 @@ def get_api_answer(timestamp):
     try:
         response = requests.get(ENDPOINT, headers=HEADERS, params=payload)
     except requests.RequestException as error:
-        raise (f'Cбой при запросе к API. {error}. {response}')
+        raise ValueError(
+            f'Cбой при запросе к API: {error}. '
+            f'Параметры запроса: {ENDPOINT}; {HEADERS}; {payload}.'
+        )
     except Exception as error:
-        raise (f'Cбой при запросе к API. {error}. {response}')
-    else:
-        if response.status_code != HTTPStatus.OK:
-            raise OkStatusError(
-                f'API домашки возвращает код, отличный от 200. {response}'
-            )
-        return response.json()
+        raise Exception(
+            f'Cбой при запросе к API: {error}. '
+            f'Параметры запроса: {ENDPOINT}; {HEADERS}; {payload}.'
+        )
+    if response.status_code != HTTPStatus.OK:
+        raise OkStatusError(
+            f'API домашки возвращает код, отличный от 200. '
+            f'Текст ответа: {response}. '
+            f'Параметры запроса: {ENDPOINT}; {HEADERS}; {payload}.'
+        )
+    return response.json()
 
 
 def check_response(response):
@@ -89,7 +95,7 @@ def parse_status(homework):
     homework_name = homework.get('homework_name')
     status = homework.get('status')
     if status not in HOMEWORK_VERDICTS:
-        raise IncorrectStatusError(
+        raise ValueError(
             'Неожиданный статус домашней работы, обнаруженный в ответе API'
         )
     return (f'Изменился статус проверки работы "{homework_name}". '
@@ -109,19 +115,17 @@ def main():
 
     while True:
         try:
-            timestamp = int(time.time())
             homeworks = get_api_answer(timestamp)
             check_response(homeworks)
+            timestamp = homeworks.get('current_date')
+            print(timestamp)
             if homeworks.get('homeworks') == []:
-                logging.debug('Список домашних работ на данный момент пуст')
-                if message != 'Список домашних работ на данный момент пуст':
-                    message = 'Список домашних работ на данный момент пуст'
-                    send_message(bot, message)
-                time.sleep(RETRY_PERIOD)
-                continue
-            homework = homeworks['homeworks'][0]
-            if message != parse_status(homework):
-                message = parse_status(homework)
+                new_message = 'Список домашних работ на данный момент пуст'
+            else:
+                homework = homeworks['homeworks'][0]
+                new_message = parse_status(homework)
+            if message != new_message:
+                message = new_message
                 send_message(bot, message)
             logging.debug(message)
         except Exception as error:

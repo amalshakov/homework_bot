@@ -33,6 +33,5 @@ python homework.py
 ```
 ## Технологии:
 - Python
-- Django
 ## Автор:
 - [Мальшаков Александр](https://github.com/amalshakov)

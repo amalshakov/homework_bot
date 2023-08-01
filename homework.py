@@ -131,8 +131,8 @@ def main():
                 logging.debug('Новые статусы отсутствуют ')
             logging.debug(message)
         except Exception as error:
-            logging.error(f'Сбой в работе программы: {error}', exc_info=True)
-            if new_message != f'Сбой в работе программы: {error}':
+            logging.error(message, exc_info=True)
+            if new_message != message:
                 message = f'Сбой в работе программы: {error}'
                 send_message(bot, message)
         finally:
